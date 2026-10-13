@@ -125,12 +125,21 @@ Ghostty + tmux is the environment tested by the author. VS Code, Zed, Apple Term
 
 ## macOS Setup
 
-After the first notification is sent:
+The first notification of each session is launched through LaunchServices so macOS
+can register the notifier and raise the permission prompt. Approve it, then:
 
 1. Open **System Settings → Notifications → pi-terminal-notifier**.
 2. Turn on **Allow Notifications**.
 3. Enable **Sounds** and choose **Banners** or **Alerts** as the notification style.
 4. If notifications are still hidden, check that **Focus** or **Do Not Disturb** is not suppressing them.
+
+The notification sent alongside the prompt is dropped while the prompt is open;
+the next one arrives normally. If **pi-terminal-notifier** never appears in that
+list, raise the prompt by hand once:
+
+```bash
+open -a node_modules/pi-terminal-notifier/vendor/pi-terminal-notifier.app
+```
 
 ## Requirements / Notes
 

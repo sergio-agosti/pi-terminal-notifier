@@ -18,18 +18,14 @@ export interface Notifier {
 
 const DEFAULT_GROUP = "pi-agent";
 
-async function findNotifierBinary(packageRoot: string): Promise<string | null> {
-  const binary = path.join(
-    packageRoot,
-    "vendor",
-    "pi-terminal-notifier.app",
-    "Contents",
-    "MacOS",
-    "pi-terminal-notifier",
-  );
+const APP_BUNDLE = path.join("vendor", "pi-terminal-notifier.app");
+const APP_EXECUTABLE = path.join("Contents", "MacOS", "pi-terminal-notifier");
+
+async function findNotifierApp(packageRoot: string): Promise<string | null> {
+  const app = path.join(packageRoot, APP_BUNDLE);
   try {
-    await access(binary);
-    return binary;
+    await access(path.join(app, APP_EXECUTABLE));
+    return app;
   } catch {
     return null;
   }
@@ -62,11 +58,14 @@ async function cleanupStaleNotifiers(binary: string): Promise<void> {
 
 export function createNotifier(packageRoot: string, terminal: TerminalContext): Notifier {
   let notifierBinary: string | null = null;
+  let notifierApp: string | null = null;
   let binaryReady = false;
+  let launchedViaLaunchServices = false;
 
-  findNotifierBinary(packageRoot)
-    .then((binary) => {
-      notifierBinary = binary;
+  findNotifierApp(packageRoot)
+    .then((app) => {
+      notifierApp = app;
+      notifierBinary = app === null ? null : path.join(app, APP_EXECUTABLE);
       binaryReady = true;
     })
     .catch(() => {
@@ -96,6 +95,22 @@ export function createNotifier(packageRoot: string, terminal: TerminalContext): 
       }
 
       await cleanupStaleNotifiers(notifierBinary);
+
+      // Spawned directly, the notifier's responsible process is the terminal, and
+      // macOS rejects its authorization request with UNErrorDomain Code=1 without
+      // ever showing a prompt: the app never reaches System Settings and every
+      // notification is dropped. Launching the bundle through LaunchServices once
+      // registers it and raises the prompt; direct spawns are authorized after that.
+      if (!launchedViaLaunchServices && notifierApp !== null) {
+        launchedViaLaunchServices = true;
+        try {
+          await execFile("open", ["-n", "-a", notifierApp, "--args", ...args]);
+          return;
+        } catch {
+          // LaunchServices unavailable — fall through to the direct spawn.
+        }
+      }
+
       const child = spawn(notifierBinary, args, { stdio: "ignore", detached: true });
       child.unref();
     },
