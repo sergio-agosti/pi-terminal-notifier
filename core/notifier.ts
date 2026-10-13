@@ -91,6 +91,8 @@ export function createNotifier(packageRoot: string, terminal: TerminalContext): 
           [path.join(packageRoot, "sounds", options.sound + ".aiff")],
           { stdio: "ignore", detached: true },
         );
+        // Missing sound files must not surface as an unhandled 'error' event.
+        sound.on("error", () => {});
         sound.unref();
       }
 
@@ -112,6 +114,14 @@ export function createNotifier(packageRoot: string, terminal: TerminalContext): 
       }
 
       const child = spawn(notifierBinary, args, { stdio: "ignore", detached: true });
+      // A helper that disappears mid-session (its package reinstalled or removed
+      // while pi is running) reports ENOENT through the 'error' event, and an
+      // unhandled 'error' event is an uncaught exception that takes down pi.
+      // Give up on notifications for the rest of the session instead.
+      child.on("error", () => {
+        notifierBinary = null;
+        notifierApp = null;
+      });
       child.unref();
     },
   };
